@@ -1,0 +1,61 @@
+
+# Disable authentication.
+# Loki will not require a username or password for API requests.
+# Suitable for a local development demo, not a publicly exposed deployment.
+auth_enabled: false
+
+
+# -------------------- HTTP SERVER --------------------
+server:
+  # Loki listens for HTTP requests on port 3100.
+  # Grafana and Alloy use this port to query Loki and send logs.
+  http_listen_port: 3100
+
+
+# -------------------- COMMON CONFIGURATION --------------------
+common:
+  # Base directory for Loki's local data and storage paths.
+  path_prefix: /loki
+
+  # Number of replicas for stored data.
+  # Set to 1 because this is a single-instance demo.
+  replication_factor: 1
+
+  ring:
+    kvstore:
+      # Keep ring information in memory instead of using an external
+      # key-value store. Appropriate for a single Loki instance.
+      store: inmemory
+
+  storage:
+    filesystem:
+      # Directory where Loki stores compressed log chunks.
+      chunks_directory: /loki/chunks
+
+      # Directory for storing rule-related files.
+      rules_directory: /loki/rules
+
+
+# -------------------- LOG INDEX SCHEMA --------------------
+schema_config:
+  configs:
+    - # Date from which this schema configuration applies.
+      # Loki uses this schema for data written from this date onward.
+      from: "2024-01-01"
+
+      # TSDB is the index store used to look up log entries efficiently.
+      store: tsdb
+
+      # Store log chunks on the local filesystem.
+      object_store: filesystem
+
+      # Schema version 13 defines the index format.
+      schema: v13
+
+      index:
+        # Prefix used for index table/file names.
+        # For example, index_ followed by a date-based identifier.
+        prefix: index_
+
+        # Create a new index period every 24 hours.
+        period: 24h

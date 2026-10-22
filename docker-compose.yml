@@ -1,0 +1,157 @@
+
+services:
+
+  # -------------------- FASTAPI APPLICATION --------------------
+  app:
+    # Build the application image using the Dockerfile in this directory.
+    build: .
+
+    # Map host port 8000 to container port 8000.
+    # Access the API through http://localhost:8000.
+    ports:
+      - "8000:8000"
+
+    environment:
+      # Database connection string.
+      # "db" is the PostgreSQL service name inside Docker's network.
+      DATABASE_URL: postgresql://demo:demo@db:5432/logdb
+
+    depends_on:
+      db:
+        # Wait until PostgreSQL passes its health check before starting
+        # the application container.
+        condition: service_healthy
+
+      tempo:
+        # Wait until the Tempo container has started.
+        # This does not guarantee Tempo is fully ready to receive traces.
+        condition: service_started
+
+
+  # -------------------- POSTGRESQL DATABASE --------------------
+  db:
+    # Use PostgreSQL version 17 with Alpine Linux.
+    image: postgres:17-alpine
+
+    environment:
+      # Initial database credentials and database name.
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: logdb
+
+    volumes:
+      # Persist database files across container replacements.
+      - pgdata:/var/lib/postgresql/data
+
+      # Execute this SQL file during initialization of a new database.
+      # Read-only mounting prevents the container from modifying the file.
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+
+    # Check whether PostgreSQL is ready to accept connections.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d logdb"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+
+  # -------------------- PROMETHEUS METRICS --------------------
+  prometheus:
+    # Prometheus collects and stores numerical time-series metrics.
+    image: prom/prometheus
+
+    ports:
+      # Access the Prometheus web interface on localhost:9090.
+      - "9090:9090"
+
+    volumes:
+      # Mount the Prometheus configuration into the container.
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+    depends_on:
+      # Start the application container before Prometheus.
+      - app
+
+
+  # -------------------- LOKI LOG STORAGE --------------------
+  loki:
+    # Loki receives, indexes, and queries application logs.
+    image: grafana/loki:3.5.0
+
+    # Tell Loki which configuration file to load.
+    command: -config.file=/etc/loki/config.yml
+
+    ports:
+      # Loki HTTP API, used by Alloy and Grafana.
+      - "3100:3100"
+
+    volumes:
+      # Mount the Loki configuration as read-only.
+      - ./loki-config.yml:/etc/loki/config.yml:ro
+
+
+  # -------------------- TEMPO DISTRIBUTED TRACING --------------------
+  tempo:
+    # Tempo stores and queries distributed traces.
+    image: grafana/tempo:2.8.0
+
+    # Tell Tempo to load its configuration file.
+    command: ["-config.file=/etc/tempo.yml"]
+
+    ports:
+      # Tempo query API, used by Grafana.
+      - "3200:3200"
+
+    volumes:
+      # Mount the Tempo configuration as read-only.
+      - ./tempo.yml:/etc/tempo.yml:ro
+
+    # Note: OTLP port 4318 is not published to the host.
+    # FastAPI can still reach tempo:4318 over the Docker network.
+
+
+  # -------------------- GRAFANA VISUALIZATION --------------------
+  grafana:
+    # Grafana provides dashboards and Explore for metrics, logs, and traces.
+    image: grafana/grafana
+
+    ports:
+      # Open the Grafana interface at http://localhost:3000.
+      - "3000:3000"
+
+    depends_on:
+      # Start the data-source services before Grafana.
+      - prometheus
+      - loki
+      - tempo
+
+
+  # -------------------- GRAFANA ALLOY LOG COLLECTOR --------------------
+  alloy:
+    # Alloy discovers Docker containers and forwards their logs to Loki.
+    image: grafana/alloy:v1.11.0
+
+    command:
+      - run
+      # Expose Alloy's own HTTP interface on port 12345.
+      - --server.http.listen-addr=0.0.0.0:12345
+      # Path to Alloy's configuration file inside the container.
+      - /etc/alloy/config.alloy
+
+    volumes:
+      # Load the Alloy configuration as read-only.
+      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
+
+      # Give Alloy access to Docker's API through the Docker socket.
+      # This enables container discovery and log collection.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    depends_on:
+      # Start Loki before Alloy.
+      - loki
+
+
+# -------------------- PERSISTENT VOLUMES --------------------
+volumes:
+  # Docker-managed storage for PostgreSQL database files.
+  pgdata:

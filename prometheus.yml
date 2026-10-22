@@ -1,0 +1,24 @@
+`
+# -------------------- GLOBAL CONFIGURATION --------------------
+global:
+  # Prometheus scrapes each target every 5 seconds.
+  # A shorter interval provides more frequent metrics updates,
+  # but increases the number of scrape requests.
+  scrape_interval: 5s
+
+
+# -------------------- SCRAPE CONFIGURATIONS --------------------
+scrape_configs:
+  # Name identifying this group of scraped targets.
+  # Metrics from this target will have the label job="fastapi".
+  - job_name: fastapi
+
+    # Define the endpoints Prometheus should scrape.
+    static_configs:
+      - targets:
+          # "app" is the FastAPI service name in Docker Compose.
+          # Port 8000 is where the application exposes /metrics.
+          # Docker's internal network allows Prometheus to reach it.
+          - "app:8000"
+
+

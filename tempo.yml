@@ -1,0 +1,35 @@
+
+# -------------------- HTTP SERVER --------------------
+server:
+  # Tempo's HTTP API listens on port 3200.
+  # Grafana uses this port to query Tempo for traces.
+  http_listen_port: 3200
+
+
+# -------------------- TRACE INGESTION --------------------
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          # Listen on every network interface inside the container.
+          # Your FastAPI application exports traces to this endpoint
+          # using the OpenTelemetry Protocol (OTLP) over HTTP.
+          endpoint: "0.0.0.0:4318"
+
+
+# -------------------- TRACE STORAGE --------------------
+storage:
+  trace:
+    # Use local filesystem storage instead of an external object store.
+    backend: local
+
+    local:
+      # Directory where Tempo stores trace data.
+      path: /tmp/tempo/traces
+
+    wal:
+      # Write-Ahead Log directory.
+      # Tempo uses the WAL to help protect incoming trace data before
+      # it is fully written into its trace storage.
+      path: /tmp/tempo/wal
